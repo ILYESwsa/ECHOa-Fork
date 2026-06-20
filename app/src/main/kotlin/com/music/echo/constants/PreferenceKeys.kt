@@ -167,6 +167,7 @@ val DiscordButton2VisibleKey = booleanPreferencesKey("discordButton2Visible")
 val DiscordActivityTypeKey = stringPreferencesKey("discordActivityType")
 val DiscordActivityNameKey = stringPreferencesKey("discordActivityName")
 val DiscordAdvancedModeKey = booleanPreferencesKey("discordAdvancedMode")
+val DiscordLastErrorKey = stringPreferencesKey("discordLastError")
 
 
 val EnableGoogleCastKey = booleanPreferencesKey("enableGoogleCast")
