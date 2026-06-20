@@ -97,8 +97,11 @@ fun IntegrationScreen(
     // ── OAuth helpers ─────────────────────────────────────────────────────────
     fun launchOAuth() {
         val verifier = DiscordRPC.generateVerifier()
-        scope.launch(Dispatchers.IO) {
-            context.dataStore.edit { it[DiscordPkceVerifierKey] = verifier }
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                context.dataStore.edit { it[DiscordPkceVerifierKey] = verifier }
+            }
+            // Browser opens only after verifier is saved
         }
         CustomTabsIntent.Builder().setShowTitle(true).build()
             .launchUrl(context, DiscordRPC.buildAuthUri(verifier))

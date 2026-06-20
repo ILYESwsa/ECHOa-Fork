@@ -355,6 +355,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        intent?.data?.let { data ->
+            if (data.scheme == "echomusic" && data.host == "discord" && data.path == "/callback") {
+                val code = data.getQueryParameter("code")
+                if (!code.isNullOrBlank()) {
+                    lifecycleScope.launch {
+                        val verifier = dataStore[iad1tya.echo.music.constants.DiscordPkceVerifierKey] ?: ""
+                        if (verifier.isNotBlank()) {
+                            runCatching {
+                                val (_, uname) = iad1tya.echo.music.utils.DiscordRPC.exchangeCode(this@MainActivity, code, verifier)
+                                dataStore.edit { it[iad1tya.echo.music.constants.EnableDiscordRPCKey] = true }
+                                android.widget.Toast.makeText(this@MainActivity, "Discord connected as $uname", android.widget.Toast.LENGTH_SHORT).show()
+                            }.onFailure { e ->
+                                android.widget.Toast.makeText(this@MainActivity, "Discord connect failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
