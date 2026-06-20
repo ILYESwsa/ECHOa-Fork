@@ -186,8 +186,14 @@
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
+        </activity>
 
-            <!-- Discord OAuth2 callback -->
+        <activity
+            android:name=".DiscordCallbackActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:autoRemoveFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
