@@ -47,7 +47,7 @@ class DiscordRPC(
         private const val TOKEN_URL = "https://discord.com/api/oauth2/token"
         private const val API_BASE  = "https://discord.com/api/v10"
         private const val WS_URL    = "wss://gateway.discord.gg/?v=10&encoding=json"
-        private const val SCOPES    = "identify gateway.connect activities.write"
+        private const val SCOPES    = "identify"
 
         private const val OP_DISPATCH        = 0
         private const val OP_HEARTBEAT       = 1
