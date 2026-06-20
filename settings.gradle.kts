@@ -7,6 +7,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { setUrl("https://jitpack.io") }
+        maven { setUrl("https://maven.arthenica.com/maven2") }
+        maven { setUrl("https://maven.aliyun.com/repository/public") }
     }
 }
 
