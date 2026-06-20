@@ -281,6 +281,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        val data = intent?.data
+        if (data?.scheme == "echomusic" && data.host == "discord" && data.path == "/callback") {
+            val code = data.getQueryParameter("code")
+            if (!code.isNullOrBlank()) {
+                intent = null // clear so it doesn't fire again on next resume
+                lifecycleScope.launch {
+                    val verifier = dataStore[iad1tya.echo.music.constants.DiscordPkceVerifierKey] ?: ""
+                    if (verifier.isBlank()) {
+                        android.widget.Toast.makeText(this@MainActivity, "Discord auth error: verifier missing", android.widget.Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    runCatching {
+                        val (_, uname) = iad1tya.echo.music.utils.DiscordRPC.exchangeCode(this@MainActivity, code, verifier)
+                        dataStore.edit { it[iad1tya.echo.music.constants.EnableDiscordRPCKey] = true }
+                        android.widget.Toast.makeText(this@MainActivity, "Discord connected as $uname", android.widget.Toast.LENGTH_SHORT).show()
+                    }.onFailure { e ->
+                        android.widget.Toast.makeText(this@MainActivity, "Discord connect failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         
