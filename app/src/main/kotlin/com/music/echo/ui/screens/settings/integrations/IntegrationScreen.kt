@@ -43,6 +43,7 @@ import iad1tya.echo.music.R
 import iad1tya.echo.music.constants.DiscordActivityNameKey
 import iad1tya.echo.music.constants.DiscordActivityTypeKey
 import iad1tya.echo.music.constants.DiscordAdvancedModeKey
+import iad1tya.echo.music.constants.DiscordLastErrorKey
 import iad1tya.echo.music.constants.DiscordButton1TextKey
 import iad1tya.echo.music.constants.DiscordButton1VisibleKey
 import iad1tya.echo.music.constants.DiscordButton2TextKey
@@ -87,6 +88,7 @@ fun IntegrationScreen(
     var activityType by rememberPreference(DiscordActivityTypeKey,   defaultValue = "listening")
     var activityName by rememberPreference(DiscordActivityNameKey,   defaultValue = "")
     var advancedMode by rememberPreference(DiscordAdvancedModeKey,   defaultValue = false)
+    var lastError    by rememberPreference(DiscordLastErrorKey,      defaultValue = "")
 
     val isConnected = accessToken.isNotBlank()
 
@@ -113,10 +115,12 @@ fun IntegrationScreen(
                     prefs[DiscordTokenKey]        = ""
                     prefs[DiscordRefreshTokenKey] = ""
                     prefs[DiscordUsernameKey]     = ""
+                    prefs[DiscordLastErrorKey]    = ""
                 }
             }
             accessToken = ""
             username    = ""
+            lastError   = ""
             enabled     = false
             Toast.makeText(context, "Disconnected from Discord", Toast.LENGTH_SHORT).show()
         }
@@ -249,6 +253,13 @@ fun IntegrationScreen(
                     title = "Presence Options",
                     items = listOf(
                         // Status
+                        IntegrationCardItem(
+                            icon  = painterResource(R.drawable.discord),
+                            title = { Text("Connection status") },
+                            description = {
+                                Text(if (lastError.isBlank()) "No Discord Gateway errors reported" else lastError)
+                            },
+                        ),
                         IntegrationCardItem(
                             icon  = painterResource(R.drawable.discord),
                             title = { Text("Status") },

@@ -6,17 +6,21 @@ import android.util.Base64
 import android.util.Log
 import androidx.datastore.preferences.core.edit
 import iad1tya.echo.music.constants.DiscordPkceVerifierKey
+import iad1tya.echo.music.constants.DiscordLastErrorKey
 import iad1tya.echo.music.constants.DiscordRefreshTokenKey
 import iad1tya.echo.music.constants.DiscordTokenKey
 import iad1tya.echo.music.constants.DiscordUsernameKey
 import iad1tya.echo.music.db.entities.Song
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import timber.log.Timber
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
@@ -31,7 +35,7 @@ import java.util.concurrent.TimeUnit
  *  2. User approves → deep link echomusic://discord/callback?code=...
  *  3. exchangeCode(code, verifier) → POST /oauth2/token (no client secret)
  *     → tokens stored in DataStore, never exposed in UI
- *  4. Gateway Identify uses "Bearer <accessToken>" → OP 3 Presence updates
+ *  4. Gateway Identify uses the OAuth access token → OP 3 Presence updates
  *
  * NOT a selfbot — uses OAuth2 Bearer token, not a raw user token.
  */
@@ -171,6 +175,23 @@ class DiscordRPC(
     private var heartbeatThread: Thread? = null
     private var lastPresencePayload: JSONObject? = null
 
+    private fun recordStatus(message: String) {
+        Timber.tag(TAG).d(message)
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                context.dataStore.edit { it[DiscordLastErrorKey] = message }
+            }
+        }
+    }
+
+    private fun clearStatus() {
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                context.dataStore.edit { it[DiscordLastErrorKey] = "" }
+            }
+        }
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     fun isRpcRunning(): Boolean = running && webSocket != null
@@ -194,7 +215,13 @@ class DiscordRPC(
             button2Text, button2Visible, activityType, activityName,
         )
         lastPresencePayload = payload
-        if (!isRpcRunning()) connectGateway(payload) else webSocket?.send(payload.toString())
+        if (!isRpcRunning()) {
+            recordStatus("Connecting to Discord Gateway…")
+            connectGateway(payload)
+        } else {
+            val sent = webSocket?.send(payload.toString()) == true
+            if (sent) clearStatus() else recordStatus("Discord Gateway send failed")
+        }
     }
 
     fun close() {
@@ -222,6 +249,7 @@ class DiscordRPC(
             override fun onOpen(ws: WebSocket, response: okhttp3.Response) {
                 webSocket = ws
                 Log.d(TAG, "Gateway connected")
+                recordStatus("Discord Gateway connected; waiting for READY…")
             }
 
             override fun onMessage(ws: WebSocket, text: String) {
@@ -229,15 +257,34 @@ class DiscordRPC(
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: okhttp3.Response?) {
-                Log.e(TAG, "Gateway failure: ${t.message}")
+                val message = "Discord Gateway failure: ${t.message ?: "unknown error"}"
+                Log.e(TAG, message)
+                recordStatus(message)
                 running = false
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "Gateway closed $code: $reason")
+                val message = gatewayCloseMessage(code, reason)
+                Log.d(TAG, message)
+                if (code != 1000) recordStatus(message)
                 running = false
             }
         })
+    }
+
+
+    private fun gatewayCloseMessage(code: Int, reason: String): String {
+        val description = when (code) {
+            4004 -> "authentication failed; reconnect your Discord account"
+            4008 -> "rate limited; wait before retrying"
+            4009 -> "session timed out; restart playback"
+            4010 -> "invalid shard"
+            4011 -> "sharding required"
+            4013 -> "invalid intents"
+            4014 -> "disallowed intents"
+            else -> reason.ifBlank { "no reason provided" }
+        }
+        return "Discord Gateway closed $code: $description"
     }
 
     private fun handleMessage(ws: WebSocket, text: String, initialPresence: JSONObject) {
@@ -255,13 +302,15 @@ class DiscordRPC(
             OP_DISPATCH -> {
                 if (json.optString("t") == "READY") {
                     Log.d(TAG, "Gateway READY")
-                    ws.send(initialPresence.toString())
+                    val sent = ws.send(initialPresence.toString())
+                    if (sent) clearStatus() else recordStatus("Discord Gateway READY but presence send failed")
                 }
             }
             OP_HEARTBEAT       -> ws.send(buildHeartbeatPayload().toString())
             OP_RECONNECT       -> ws.close(4000, "reconnect")
             OP_INVALID_SESSION -> {
                 Log.w(TAG, "Invalid session")
+                recordStatus("Discord Gateway invalid session; retrying identify")
                 Thread.sleep(2000)
                 ws.send(buildIdentifyPayload().toString())
             }
@@ -286,7 +335,7 @@ class DiscordRPC(
     private fun buildIdentifyPayload() = JSONObject().apply {
         put("op", OP_IDENTIFY)
         put("d", JSONObject().apply {
-            put("token", "Bearer $accessToken")   // OAuth2 — not a selfbot token
+            put("token", accessToken)   // Gateway Identify expects the raw token string, not an HTTP Authorization header.
             put("capabilities", 16381)
             put("properties", SuperProperties.superProperties)
             put("presence", JSONObject().apply {
@@ -348,8 +397,8 @@ class DiscordRPC(
             put("name",    resolvedName)
             put("type",    typeId)
             put("flags",   1)
-            put("details", if (useDetails) song.title else song.title)
-            put("state",   if (useDetails) artist else artist)
+            put("details", if (useDetails) song.title else artist)
+            put("state",   if (useDetails) artist else song.title)
 
             val startMs = System.currentTimeMillis() - currentPlaybackTimeMillis.coerceAtLeast(0L)
             put("timestamps", JSONObject().apply { put("start", startMs) })
