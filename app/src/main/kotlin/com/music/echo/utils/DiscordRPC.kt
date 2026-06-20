@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
  *  2. User approves → deep link echomusic://discord/callback?code=...
  *  3. exchangeCode(code, verifier) → POST /oauth2/token (no client secret)
  *     → tokens stored in DataStore, never exposed in UI
- *  4. Gateway Identify uses "Bearer <accessToken>" → OP 3 Presence updates
+ *  4. Gateway Identify uses the OAuth access token → OP 3 Presence updates
  *
  * NOT a selfbot — uses OAuth2 Bearer token, not a raw user token.
  */
@@ -264,12 +264,27 @@ class DiscordRPC(
             }
 
             override fun onClosed(ws: WebSocket, code: Int, reason: String) {
-                val message = "Discord Gateway closed $code: $reason"
+                val message = gatewayCloseMessage(code, reason)
                 Log.d(TAG, message)
                 if (code != 1000) recordStatus(message)
                 running = false
             }
         })
+    }
+
+
+    private fun gatewayCloseMessage(code: Int, reason: String): String {
+        val description = when (code) {
+            4004 -> "authentication failed; reconnect your Discord account"
+            4008 -> "rate limited; wait before retrying"
+            4009 -> "session timed out; restart playback"
+            4010 -> "invalid shard"
+            4011 -> "sharding required"
+            4013 -> "invalid intents"
+            4014 -> "disallowed intents"
+            else -> reason.ifBlank { "no reason provided" }
+        }
+        return "Discord Gateway closed $code: $description"
     }
 
     private fun handleMessage(ws: WebSocket, text: String, initialPresence: JSONObject) {
@@ -320,7 +335,7 @@ class DiscordRPC(
     private fun buildIdentifyPayload() = JSONObject().apply {
         put("op", OP_IDENTIFY)
         put("d", JSONObject().apply {
-            put("token", "Bearer $accessToken")   // OAuth2 — not a selfbot token
+            put("token", accessToken)   // Gateway Identify expects the raw token string, not an HTTP Authorization header.
             put("capabilities", 16381)
             put("properties", SuperProperties.superProperties)
             put("presence", JSONObject().apply {
