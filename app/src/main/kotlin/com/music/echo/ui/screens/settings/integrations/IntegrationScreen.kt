@@ -101,10 +101,9 @@ fun IntegrationScreen(
             withContext(Dispatchers.IO) {
                 context.dataStore.edit { it[DiscordPkceVerifierKey] = verifier }
             }
-            // Browser opens only after verifier is saved
+            CustomTabsIntent.Builder().setShowTitle(true).build()
+                .launchUrl(context, DiscordRPC.buildAuthUri(verifier))
         }
-        CustomTabsIntent.Builder().setShowTitle(true).build()
-            .launchUrl(context, DiscordRPC.buildAuthUri(verifier))
     }
 
     fun disconnect() {
